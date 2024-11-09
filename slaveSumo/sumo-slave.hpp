@@ -18,7 +18,6 @@
 #include <libsumo/libtraci.h>
 
 class Slave {
-
 private:
     DcpManagerSlave *manager;
     OstreamLog stdLog;
@@ -26,22 +25,35 @@ private:
     UdpDriver* udpDriver;
     const char *const HOST = "127.0.0.1";
     const int PORT = 8080;
-    
-    //VALORI PER LO STEP TEMPORALE (num/den seconds)
+
+    const char *const sumoHost = "127.0.0.1";
+    const int sumoPort = 3377;
+
     uint32_t numerator;
     uint32_t denominator;
 
     double simulationTime;
     uint64_t currentStep;
 
-
     const LogTemplate SIM_LOG = LogTemplate(
             1, 1, DcpLogLevel::LVL_INFORMATION,
             "[Time = %float64]: sin(%uint64 + %float64) = %float64",
             {DcpDataType::float64, DcpDataType::uint64, DcpDataType::float64, DcpDataType::float64});
 
+    char* pos;
+    DcpString* posStr;
+    const uint32_t pos_vr = 1;
 
- public:
+    uint8_t* sem_value;
+    const uint32_t sem_vr = 2;
+
+
+
+
+
+}
+
+public:
     Slave() : stdLog(std::cout) {
         udpDriver = new UdpDriver(HOST, PORT);
         manager = new DcpManagerSlave(getSlaveDescription(), udpDriver->getDcpDriver());
@@ -55,17 +67,11 @@ private:
                 std::bind(&Slave::doStep, this, std::placeholders::_1));
         manager->setRunningStepCallback<SYNC>(
                 std::bind(&Slave::doStep, this, std::placeholders::_1));
-                manager->setSynchronizingNRTStepCallback<SYNC>(
-                std::bind(&Slave::doStep, this, std::placeholders::_1));
-        manager->setSynchronizedNRTStepCallback<SYNC>(
-                std::bind(&Slave::doStep, this, std::placeholders::_1));
-        manager->setRunningStepNRTCallback<SYNC>(
-                std::bind(&Slave::doStep, this, std::placeholders::_1));
         manager->setTimeResListener<SYNC>(std::bind(&Slave::setTimeRes, this,
                                                     std::placeholders::_1,
                                                     std::placeholders::_2));
 
-        //MESSAGGI IN CONSOLE CON IL LOGGER
+        //Display log messages on console
         manager->addLogListener(
                 std::bind(&OstreamLog::logOstream, stdLog, std::placeholders::_1));
         manager->setGenerateLogString(true);
@@ -77,13 +83,27 @@ private:
         delete udpDriver;
     }
 
-     void configure() {
+
+    void configure() {
         simulationTime = 0;
         currentStep = 0;
+
+        sem_value = manager->getInput<uint8_t *>(sem_vr);
+        pos = manager->getOutput<char*>(pos_vr);
+        posStr = new DcpString(pos);
+
+         try {
+            traci.connect(sumoHost, sumoPort);
+            std::cout << "Connesso a SUMO su " << sumoHost << ":" << sumoPort << std::endl;
+            return true;
+        } catch (const std::exception& e) {
+            std::cerr << "Errore di connessione a SUMO: " << e.what() << std::endl;
+            return false;
+        }
     }
 
     void initialize() {
-        *y = std::sin(currentStep + *a);
+        posStr->setString(" ");
     }
 
     void doStep(uint64_t steps) {
@@ -92,6 +112,7 @@ private:
 
 
         *y = std::sin(currentStep + *a);
+
         manager->Log(SIM_LOG, simulationTime, currentStep, *a, *y);
         simulationTime += timeDiff;
         currentStep += steps;
@@ -102,12 +123,10 @@ private:
         this->denominator = denominator;
     }
 
-    void start() {
-
-            manager->start(); }
+    void start() { manager->start(); }
 
     SlaveDescription_t getSlaveDescription(){
-        SlaveDescription_t slaveDescription = make_SlaveDescription(1, 0, "dcpslave", "b5279485-720d-4542-9f29-bee4d9a75ef9");
+        SlaveDescription_t slaveDescription = make_SlaveDescription(1, 0, "slaveSumo", "b5279485-720d-4542-9f29-bee4d9a75000");
         slaveDescription.OpMode.SoftRealTime = make_SoftRealTime_ptr();
         Resolution_t resolution = make_Resolution();
         resolution.numerator = 1;
@@ -131,12 +150,14 @@ private:
         slaveDescription.CapabilityFlags.canProvideLogOnRequest = true;
         slaveDescription.CapabilityFlags.canProvideLogOnNotification = true;
 
-        std::shared_ptr<Output_t> caus_y = make_Output_ptr<float64_t>();
-        slaveDescription.Variables.push_back(make_Variable_output("y", y_vr, caus_y));
+        std::shared_ptr<Output_t> caus_pos = make_Output_String_ptr();
+		caus_y->String->maxSize = std::make_shared<uint32_t>(2000);
+		caus_y->String->start = std::make_shared<std::string>(" ");
+        slaveDescription.Variables.push_back(make_Variable_output("pos", pos_vr, caus_pos));
         std::shared_ptr<CommonCausality_t> caus_a =
                 make_CommonCausality_ptr<float64_t>();
-        caus_a->Float64->start = std::make_shared<std::vector<float64_t>>();
-        caus_a->Float64->start->push_back(10.0);
+        caus_a->Uint8->start = std::make_shared<std::vector<float64_t>>();
+        caus_a->Uint8->start->push_back(0);
         slaveDescription.Variables.push_back(make_Variable_input("a", a_vr, caus_a));
         slaveDescription.Log = make_Log_ptr();
         slaveDescription.Log->categories.push_back(make_Category(1, "DCP_SLAVE"));
@@ -145,7 +166,6 @@ private:
 
        return slaveDescription;
     }
-
 
 };
 

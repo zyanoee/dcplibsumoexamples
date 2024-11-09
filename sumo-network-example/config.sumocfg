@@ -6,5 +6,8 @@
     <time>
         <begin value="0"/>
         <end value="3600"/>
+        <time>
+            <step-length value="0.01"/>
+        </time>
     </time>
 </configuration>

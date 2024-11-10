@@ -15,7 +15,9 @@
 #include <cmath>
 #include <iostream>
 
+#include <libsumo/libsumo.h>
 #include <libsumo/libtraci.h>
+
 
 class Slave {
 private:
@@ -47,15 +49,17 @@ private:
     uint8_t* sem_value;
     const uint32_t sem_vr = 2;
 
+    std::vector<std::string> edgeIDs;
+    std::string old_id = "";
 
 
 
 
-}
 
 public:
     Slave() : stdLog(std::cout) {
         udpDriver = new UdpDriver(HOST, PORT);
+        std::cout << "Gestione dello SlaveDescription" << std::endl;
         manager = new DcpManagerSlave(getSlaveDescription(), udpDriver->getDcpDriver());
         manager->setInitializeCallback<SYNC>(
                 std::bind(&Slave::initialize, this));
@@ -85,6 +89,7 @@ public:
 
 
     void configure() {
+        std::cout << "Inizio configurazione" << std::endl;
         simulationTime = 0;
         currentStep = 0;
 
@@ -92,28 +97,61 @@ public:
         pos = manager->getOutput<char*>(pos_vr);
         posStr = new DcpString(pos);
 
-         try {
-            traci.connect(sumoHost, sumoPort);
-            std::cout << "Connesso a SUMO su " << sumoHost << ":" << sumoPort << std::endl;
-            return true;
-        } catch (const std::exception& e) {
-            std::cerr << "Errore di connessione a SUMO: " << e.what() << std::endl;
-            return false;
-        }
+
+        std::cout << "Inizio connessione a SUMO" << std::endl;
+        //CONNESSIONE A SUMO ATTRAVERSO TRACI
+        libsumo::Simulation::start({"sumo-guiD", "-c", "../sumo-network-example/config.sumocfg"});
+
+        std::cout << "Connessione a SUMO riuscita" << std::endl;
+        //OTTENIAMO GLI EDGE DELLA RETE
+        std::cout << "Ottenimento topologia mappa" << std::endl;
+        edgeIDs = libsumo::Edge::getIDList();
+        std::cout << "Done!" << std::endl;
     }
 
     void initialize() {
-        posStr->setString(" ");
+        std::string str("");
+        posStr->setString(str);
     }
 
     void doStep(uint64_t steps) {
         float64_t timeDiff =
                 ((double) numerator) / ((double) denominator) * ((double) steps);
 
+        //STEP SUMO
+        libsumo::Simulation::step();
 
-        *y = std::sin(currentStep + *a);
+        //OTTENIAMO I VEICOLI PRESENTI IN SIMULAZIONE
+        std::vector<std::string> vehicleIDs = libsumo::Vehicle::getIDList();
 
-        manager->Log(SIM_LOG, simulationTime, currentStep, *a, *y);
+        //ITERIAMO SUI VEICOLI E OTTENIAMO LE POSIZIONI
+        //per semplicità e per esempio della classe DcpString userò una stringa
+        //del tipo id#posx#posy@id2#posx2#posy2 ...
+        std::string outputString = "";
+        for (const auto& id : vehicleIDs) {
+                double posx = libsumo::Vehicle::getPosition(id, false).x;
+                double posy = libsumo::Vehicle::getPosition(id, false).y;
+                std::string tmp = id + "#" + std::to_string(posx) + "#" + std::to_string(posy) + "@";
+                outputString += tmp;
+        }
+
+        posStr -> setString(outputString);
+
+        if(*sem_value >= 128){
+                int random_index = *sem_value%edgeIDs.size();
+                std::string newRand = edgeIDs[random_index];
+                libsumo::Edge::setMaxSpeed(newRand, 0.0);
+                //RIPRISTINO VECCHIO EDGE FERMO
+                if(old_id!=""){libsumo::Edge::setMaxSpeed(old_id, 30.0);}
+                old_id=newRand;
+                //REROUTING DATO EDGE FERMO
+                for (const auto& id : vehicleIDs) {
+                        libsumo::Vehicle::rerouteTraveltime(id);
+                }
+
+        }
+
+        std::cout << (SIM_LOG, simulationTime, currentStep) << std::endl;
         simulationTime += timeDiff;
         currentStep += steps;
     }
@@ -123,7 +161,9 @@ public:
         this->denominator = denominator;
     }
 
-    void start() { manager->start(); }
+    void start() {
+    std::cout << "Avvio del Manager" << std::endl;
+    manager->start();}
 
     SlaveDescription_t getSlaveDescription(){
         SlaveDescription_t slaveDescription = make_SlaveDescription(1, 0, "slaveSumo", "b5279485-720d-4542-9f29-bee4d9a75000");
@@ -150,19 +190,20 @@ public:
         slaveDescription.CapabilityFlags.canProvideLogOnRequest = true;
         slaveDescription.CapabilityFlags.canProvideLogOnNotification = true;
 
+        std::cout << "--Gestione dei pointer per gli output" << std::endl;
         std::shared_ptr<Output_t> caus_pos = make_Output_String_ptr();
-		caus_y->String->maxSize = std::make_shared<uint32_t>(2000);
-		caus_y->String->start = std::make_shared<std::string>(" ");
+		caus_pos->String->maxSize = std::make_shared<uint32_t>(9999);
+		caus_pos->String->start = std::make_shared<std::string>(" ");
         slaveDescription.Variables.push_back(make_Variable_output("pos", pos_vr, caus_pos));
+        std::cout << "--Gestione dei pointer per gli input" << std::endl;
         std::shared_ptr<CommonCausality_t> caus_a =
-                make_CommonCausality_ptr<float64_t>();
-        caus_a->Uint8->start = std::make_shared<std::vector<float64_t>>();
+                make_CommonCausality_ptr<uint8_t>();
+        caus_a->Uint8->start = std::make_shared<std::vector<uint8_t>>();
         caus_a->Uint8->start->push_back(0);
-        slaveDescription.Variables.push_back(make_Variable_input("a", a_vr, caus_a));
+        slaveDescription.Variables.push_back(make_Variable_input("sem_value", sem_vr, caus_a));
         slaveDescription.Log = make_Log_ptr();
         slaveDescription.Log->categories.push_back(make_Category(1, "DCP_SLAVE"));
-        slaveDescription.Log->templates.push_back(make_Template(
-                1, 1, (uint8_t) DcpLogLevel::LVL_INFORMATION, "[Time = %float64]: sin(%uint64 + %float64) = %float64"));
+        std::cout << "--SlaveDescription creato" << std::endl;
 
        return slaveDescription;
     }

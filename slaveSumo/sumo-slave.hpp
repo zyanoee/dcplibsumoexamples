@@ -100,7 +100,8 @@ public:
 
         std::cout << "Inizio connessione a SUMO" << std::endl;
         //CONNESSIONE A SUMO ATTRAVERSO TRACI
-        libsumo::Simulation::start({"sumo-guiD", "-c", "../sumo-network-example/config.sumocfg"});
+        libsumo::Simulation::start({"sumo", "-c", "../sumo-network-example/config.sumocfg"});
+        libsumo::Simulation::step(1);
 
         std::cout << "Connessione a SUMO riuscita" << std::endl;
         //OTTENIAMO GLI EDGE DELLA RETE
@@ -119,7 +120,8 @@ public:
                 ((double) numerator) / ((double) denominator) * ((double) steps);
 
         //STEP SUMO
-        libsumo::Simulation::step();
+        std::cout<<"Inizio step SUMO"<<std::endl;
+        libsumo::Simulation::step(1);
 
         //OTTENIAMO I VEICOLI PRESENTI IN SIMULAZIONE
         std::vector<std::string> vehicleIDs = libsumo::Vehicle::getIDList();
@@ -129,6 +131,7 @@ public:
         //del tipo id#posx#posy@id2#posx2#posy2 ...
         std::string outputString = "";
         for (const auto& id : vehicleIDs) {
+                std::cout<<"Iterazione sul veicolo con ID: "<< id <<std::endl;
                 double posx = libsumo::Vehicle::getPosition(id, false).x;
                 double posy = libsumo::Vehicle::getPosition(id, false).y;
                 std::string tmp = id + "#" + std::to_string(posx) + "#" + std::to_string(posy) + "@";
@@ -138,8 +141,10 @@ public:
         posStr -> setString(outputString);
 
         if(*sem_value >= 128){
+                std::cout << "Cambio edge del network" << std::endl;
                 int random_index = *sem_value%edgeIDs.size();
                 std::string newRand = edgeIDs[random_index];
+                std::cout << "Edge con id " << newRand << "Ora inaccessibile, Ripristino dell'edge con id "<<old_id << std::endl;
                 libsumo::Edge::setMaxSpeed(newRand, 0.0);
                 //RIPRISTINO VECCHIO EDGE FERMO
                 if(old_id!=""){libsumo::Edge::setMaxSpeed(old_id, 30.0);}

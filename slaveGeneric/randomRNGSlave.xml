@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dcpSlaveDescription dcpMajorVersion="1" dcpMinorVersion="0" dcpSlaveName="salveRNGGen" uuid="2fcef2a4-51d0-11ec-bf63-0242ac130002" variableNamingConvention="flat" >
+	<OpMode>
+		<NonRealTime />
+	</OpMode>
+
+
+	<TimeRes>
+		<Resolution denominator="100" />
+	</TimeRes>
+
+	<TransportProtocols>
+		<UDP_IPv4 maxPduSize="65507" >
+			<Control host="127.0.0.1" port="8082" />
+			<DAT_input_output host="" >
+				<AvailablePortRange from="2048" to="65535" />
+			</DAT_input_output>
+			<DAT_parameter host="" >
+				<AvailablePortRange from="2048" to="65535" />
+			</DAT_parameter>
+		</UDP_IPv4>
+
+	</TransportProtocols>
+	<CapabilityFlags canAcceptConfigPdus="true" canHandleReset="true" canHandleVariableSteps="true" canProvideLogOnRequest="true" canProvideLogOnNotification="true" />
+	<Variables>
+		<Variable name="sem_val" valueReference="2" >
+			<Output>
+				<Uint8 />
+			</Output>
+		</Variable>
+	</Variables> 
+	<Log>
+		<Categories>
+			<Category id="1" name="DCP_SLAVE" />
+		</Categories>
+		<Templates>
+			<Template id="1" category="1" level="3" msg="[Time = %float64]: Random value is: %uint8" />
+		</Templates>
+	</Log> 
+</dcpSlaveDescription>

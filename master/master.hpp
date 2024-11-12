@@ -20,7 +20,7 @@ public:
     MasterModel() : stdLog(std::cout) {
         driver = new UdpDriver(HOST, PORT);
 
-        slaveDescription1 = readSlaveDescription("MSD1-Slave-Description.xml");
+        slaveDescription1 = readSlaveDescription("slavesumodesc.xml");
        // slaveDescription2 = readSlaveDescription("MSD2-Slave-Description.xml");
         manager = new DcpManagerMaster(driver->getDcpDriver());
         uint8_t netInfo1[6];
@@ -82,24 +82,31 @@ private:
             receivedAcks[1] = 0;
             //Configurazione degli scope per una Data PDU identificato dal data_id (vr nel caso nostro)
             //Per maggiori dettagli sui tipi di DcpScope e loro funzionamento guardare "DCP Specification v1" Sezione 3.4.6 "Scope"
+
             manager->CFG_scope(1, 1, DcpScope::Initialization_Run_NonRealTime);
+            std::cout << "SlaveID=1 VR=1 Scope: Initialization_Run_NRT" << std::endl;
             manager->CFG_scope(1, 2, DcpScope::Initialization_Run_NonRealTime);
+            std::cout << "SlaveID=1 VR=2 Scope: Initialization_Run_NRT" << std::endl;
 
             //Configurazione degli input e output in base al loro data_id e posizione nel PDU_input_output
             manager->CFG_output(1, 1, 0, slaveDescription1->Variables.at(0).valueReference);
+            std::cout << "SlaveID=1 OUTPUT Value Reference VR=1" << std::endl;
             manager->CFG_input(1, 2, 0, slaveDescription1->Variables.at(1).valueReference, DcpDataType::uint8);
-
+            std::cout << "SlaveID=1 INPUT Value Reference VR=2" << std::endl;
 
             manager->CFG_steps(1, 1, 1);
+            std::cout << "SlaveID=1 CFG Steps" << std::endl;
             manager->CFG_time_res(1, slaveDescription1->TimeRes.resolutions.front().numerator,
                                   slaveDescription1->TimeRes.resolutions.front().denominator);
-
+            std::cout << "SlaveID=1 VR=1 CFG Time Resolution" << std::endl;
             //Informazioni di network di source e target per lo scambio di dati tra gli slave
             manager->CFG_source_network_information_UDP(1, 2, asio::ip::address_v4::from_string(
                 *slaveDescription1->TransportProtocols.UDP_IPv4->Control->host).to_ulong(), port1);
-            /*manager->CFG_target_network_information_UDP(1, 1, asio::ip::address_v4::from_string(
-                *slaveDescription2->TransportProtocols.UDP_IPv4->Control->host).to_ulong(), port2);
-            */
+            std::cout << "SlaveID=1 Source Network Informations" << std::endl;
+            manager->CFG_target_network_information_UDP(1, 1, asio::ip::address_v4::from_string(
+                *slaveDescription1->TransportProtocols.UDP_IPv4->Control->host).to_ulong(), port1); //RICORDA DI EDITARE MATTEO
+            std::cout << "SlaveID=1 Target Network Informations" << std::endl;
+
 
             //Il numero di comandi effettuati sopra, una volta che gli ack ricevuti equivarranno, il master procede con il prossimo slave o fase
             numOfCmd[1] = 8;
@@ -134,18 +141,21 @@ private:
     }
 
     void run(DcpState currentState, uint8_t sender) {
-        SlavesReady[sender - 1] = true;
+       /* SlavesReady[sender - 1] = true;
         if (std::all_of(SlavesReady, SlavesReady + 2, [](bool i) { return i; })) {
             std::cout << "Run Simulation" << std::endl;
             std::time_t now = std::time(0);
             manager->STC_run(1, currentState, now + 2);
     //        manager->STC_run(2, currentState, now + 2);
             std::fill(SlavesReady, SlavesReady + 2, false);
-        }
+        }*/
+       std::cout << "Run Simulation" << std::endl;
+       std::time_t now = std::time(0);
+       manager->STC_run(1, currentState, now + 2);
     }
 
     void stop(uint8_t sender) {
-        SlavesReady[sender - 1] = true;
+       /* SlavesReady[sender - 1] = true;
         if (std::all_of(SlavesReady, SlavesReady + 2, [](bool i) { return i; })) {
             std::chrono::seconds dura(secondsToSimulate + 2);
             std::this_thread::sleep_for(dura);
@@ -154,7 +164,13 @@ private:
             manager->STC_stop(1, DcpState::RUNNING);
            // manager->STC_stop(2, DcpState::RUNNING);
             std::fill(SlavesReady, SlavesReady + 2, false);
-        }
+        }*/
+       std::chrono::seconds dura(secondsToSimulate + 2);
+       std::this_thread::sleep_for(dura);
+       std::cout << "Stop Simulation" << std::endl;
+
+       manager->STC_stop(1, DcpState::RUNNING);
+
     }
 
     void deregister(uint8_t sender) {
@@ -179,6 +195,9 @@ private:
     void receiveNAck(uint8_t sender, uint16_t pduSeqId,
                      DcpError errorCode) {
         std::cerr << "Error in slave configuration." << std::endl;
+        std::cerr << "Sender: " << static_cast<int>(sender)
+        << ", PDU Seq ID: " << pduSeqId
+        << ", Error Code: 0x" << std::setw(2) << std::setfill('0') << static_cast<int>(errorCode) << std::endl;
         std::exit(1);
                      }
 
@@ -241,7 +260,7 @@ private:
 
     UdpDriver *driver;
     const char *const HOST = "127.0.0.1";
-    const uint16_t PORT = 8080;
+    const uint16_t PORT = 8081;
 
     DcpManagerMaster *manager;
 

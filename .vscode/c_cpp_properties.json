@@ -6,7 +6,9 @@
                 "${workspaceFolder}/**",
                 "/usr/local/include/DCPLib/core",
                 "/usr/local/include/DCPLib/slave",
-                "/usr/local/include/DCPLib/ethernet"
+                "/usr/local/include/DCPLib/ethernet",
+                "/usr/local/include/DCPLib/xml",
+                "/usr/local/include/DCPLib/master"
             ],
             "compilerPath": "/usr/bin/gcc",
             "cStandard": "${default}",

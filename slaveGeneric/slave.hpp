@@ -19,6 +19,7 @@
 class Slave {
 public:
     Slave() : stdLog(std::cout) {
+        rng.seed(rd());
         udpDriver = new UdpDriver(HOST, PORT);
         std::cout << "Gestione dello SlaveDescription" << std::endl;
         SlaveDescription_t slaved = getSlaveDescription();
@@ -61,6 +62,7 @@ public:
         currentStep = 0;
 
         a = manager->getOutput<uint8_t *>(a_vr);
+        *a = 0;
     }
 
     void initialize() {
@@ -71,21 +73,23 @@ public:
     void doStep(uint64_t steps) {
         std::cout << "Chiamata del doStep" << std::endl;
         float64_t timeDiff =
-            ((double)numerator) / ((double)denominator) * ((double)steps);
+            ((double)numerator) / ((double)denominator) * (currentStep);
 
         //Funzione che restituisce un valore pseudocasuale che differisce progressivamente
         //dal numero iniziale e ricomincia la sua logica dopo che la distanza dal numero si fa
         //molto grande
 
         std::uniform_int_distribution<int> dist(1, current_distance);
+        std::cout << "Distribuzione casuale" << std::endl;
         current_value += dist(rng);
+        std::cout << "current value modificato" << std::endl;
         if (current_distance < max_distance) {
             ++current_distance;
         } else {
             current_distance = 1;
         }
-        *a=current_distance;
-        std::cout << "[ "<< timeDiff <<" ]" << "Nuovo valore pseudorandomico: "<< *a << std::endl;
+        *a=current_value;
+        std::cout << "[ "<< timeDiff <<" ]" << "Nuovo valore pseudorandomico: "<< std::to_string(*a) << std::endl;
         simulationTime += timeDiff;
         currentStep += steps;
     }
@@ -164,7 +168,7 @@ private:
 
     int current_value=2;
     int max_distance=20;
-    int current_distance;
+    int current_distance=1;
     std::random_device rd;
     std::mt19937 rng;
 

@@ -101,7 +101,7 @@ public:
         std::cout << "Inizio connessione a SUMO" << std::endl;
         //CONNESSIONE A SUMO ATTRAVERSO TRACI
         libsumo::Simulation::start({"sumo", "-c", "../sumo-network-example/config.sumocfg"});
-        libsumo::Simulation::step(1);
+        libsumo::Simulation::step(100);
 
         std::cout << "Connessione a SUMO riuscita" << std::endl;
         //OTTENIAMO GLI EDGE DELLA RETE
@@ -121,7 +121,7 @@ public:
 
         //STEP SUMO
         std::cout<<"Inizio step SUMO"<<std::endl;
-        libsumo::Simulation::step(1);
+        libsumo::Simulation::step(100);
 
         //OTTENIAMO I VEICOLI PRESENTI IN SIMULAZIONE
         std::vector<std::string> vehicleIDs = libsumo::Vehicle::getIDList();

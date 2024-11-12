@@ -13,26 +13,28 @@
 #include <dcp/driver/ethernet/udp/UdpDriver.hpp>
 #include <dcp/logic/DcpManagerMaster.hpp>
 #include <dcp/log/OstreamLog.hpp>
+#include <thread>
 
 
 class MasterModel {
 public:
     MasterModel() : stdLog(std::cout) {
+        main_thread_id = std::this_thread::get_id();
         driver = new UdpDriver(HOST, PORT);
 
         slaveDescription1 = readSlaveDescription("slavesumodesc.xml");
-       // slaveDescription2 = readSlaveDescription("MSD2-Slave-Description.xml");
+        slaveDescription2 = readSlaveDescription("randomRNGSlave.xml");
         manager = new DcpManagerMaster(driver->getDcpDriver());
         uint8_t netInfo1[6];
         *((uint16_t *) netInfo1) = *slaveDescription1->TransportProtocols.UDP_IPv4->Control->port;
         *((uint32_t *) (netInfo1 + 2)) = asio::ip::address_v4::from_string(*slaveDescription1->TransportProtocols.UDP_IPv4->Control->host).to_ulong();
         driver->getDcpDriver().setSlaveNetworkInformation(1, netInfo1);
 
-    /* uint8_t netInfo2[6];
+        uint8_t netInfo2[6];
         *((uint16_t *)netInfo2) = *slaveDescription2->TransportProtocols.UDP_IPv4->Control->port;
         *((uint32_t *)(netInfo2 + 2)) = asio::ip::address_v4::from_string(*slaveDescription2->TransportProtocols.UDP_IPv4->Control->host).to_ulong();
         driver->getDcpDriver().setSlaveNetworkInformation(2, netInfo2);
-    */
+
         manager->setAckReceivedListener<SYNC>(
             std::bind(&MasterModel::receiveAck, this, std::placeholders::_1, std::placeholders::_2));
         manager->setNAckReceivedListener<SYNC>(
@@ -57,7 +59,7 @@ public:
         //driver->getDcpDriver().connectToSlave(1);
         std::cout << "Register Slaves" << std::endl;
         manager->STC_register(1, DcpState::ALIVE, convertToUUID(slaveDescription1->uuid), DcpOpMode::SRT, 1, 0);
-    //    manager->STC_register(2, DcpState::ALIVE, convertToUUID(slaveDescription2->uuid), DcpOpMode::SRT, 1, 0);
+        manager->STC_register(2, DcpState::ALIVE, convertToUUID(slaveDescription2->uuid), DcpOpMode::NRT, 1, 0);
         b.join();
     }
 
@@ -67,7 +69,7 @@ private:
         if (std::all_of(SlavesReady, SlavesReady + 2, [](bool i) { return i; })) {
             std::cout << "Initialize Slaves" << std::endl;
             manager->STC_initialize(1, DcpState::CONFIGURED);
-      //      manager->STC_initialize(2, DcpState::CONFIGURED);
+            manager->STC_initialize(2, DcpState::CONFIGURED);
             intializationRuns++;
         }
     }
@@ -79,6 +81,7 @@ private:
         const uint16_t port2 = 60002;
         if (1 == sender)
         {
+            std::cout << "Configure Slave 1" << std::endl;
             receivedAcks[1] = 0;
             //Configurazione degli scope per una Data PDU identificato dal data_id (vr nel caso nostro)
             //Per maggiori dettagli sui tipi di DcpScope e loro funzionamento guardare "DCP Specification v1" Sezione 3.4.6 "Scope"
@@ -98,13 +101,13 @@ private:
             std::cout << "SlaveID=1 CFG Steps" << std::endl;
             manager->CFG_time_res(1, slaveDescription1->TimeRes.resolutions.front().numerator,
                                   slaveDescription1->TimeRes.resolutions.front().denominator);
-            std::cout << "SlaveID=1 VR=1 CFG Time Resolution" << std::endl;
+            std::cout << "SlaveID=1 CFG Time Resolution" << std::endl;
             //Informazioni di network di source e target per lo scambio di dati tra gli slave
             manager->CFG_source_network_information_UDP(1, 2, asio::ip::address_v4::from_string(
                 *slaveDescription1->TransportProtocols.UDP_IPv4->Control->host).to_ulong(), port1);
             std::cout << "SlaveID=1 Source Network Informations" << std::endl;
             manager->CFG_target_network_information_UDP(1, 1, asio::ip::address_v4::from_string(
-                *slaveDescription1->TransportProtocols.UDP_IPv4->Control->host).to_ulong(), port1); //RICORDA DI EDITARE MATTEO
+                *slaveDescription2->TransportProtocols.UDP_IPv4->Control->host).to_ulong(), port2); //RICORDA DI EDITARE MATTEO
             std::cout << "SlaveID=1 Target Network Informations" << std::endl;
 
 
@@ -112,28 +115,30 @@ private:
             numOfCmd[1] = 8;
 
         }
-       /* if (2 == sender)
+        if (2 == sender)
         {
-
+            std::cout << "Configure Slave 2" << std::endl;
             receivedAcks[2] = 0;
-            manager->CFG_scope(2, 1, DcpScope::Initialization_Run_NonRealTime);
             manager->CFG_scope(2, 2, DcpScope::Initialization_Run_NonRealTime);
+            std::cout << "SlaveID=2 VR=2 Scope: Initialization_Run_NRT" << std::endl;
 
             // inuput dataId = 1, output dataId = 2
-            manager->CFG_output(2, 2, 0, slaveDescription2->Variables.at(4).valueReference);
-            manager->CFG_input(2, 1, 0, slaveDescription2->Variables.at(2).valueReference, DcpDataType::float64);
-            manager->CFG_input(2, 1, 1, slaveDescription2->Variables.at(3).valueReference, DcpDataType::float64);
-
+            manager->CFG_output(2, 2, 0, slaveDescription2->Variables.at(0).valueReference);
+            std::cout << "SlaveID=2 VR=2 OUTPUT Value Reference VR=2" << std::endl;
             manager->CFG_steps(2, 2, 1);
+            std::cout << "SlaveID=2 CFG Steps" << std::endl;
             manager->CFG_time_res(2, slaveDescription1->TimeRes.resolutions.front().numerator,
                                   slaveDescription1->TimeRes.resolutions.front().denominator);
+            std::cout << "SlaveID=2 CFG Time Resolutions" << std::endl;
             manager->CFG_source_network_information_UDP(2, 1, asio::ip::address_v4::from_string(
                 *slaveDescription2->TransportProtocols.UDP_IPv4->Control->host).to_ulong(), port2);
+            std::cout << "SlaveID=2 Source Network Informations" << std::endl;
             manager->CFG_target_network_information_UDP(2, 2, asio::ip::address_v4::from_string(
                 *slaveDescription1->TransportProtocols.UDP_IPv4->Control->host).to_ulong(), port1);
-            numOfCmd[2] = 9;
+            std::cout << "SlaveID=2 Target Network Informations" << std::endl;
+            numOfCmd[2] = 6;
         }
-        */
+
     }
 
     void configure(uint8_t sender) {
@@ -141,35 +146,33 @@ private:
     }
 
     void run(DcpState currentState, uint8_t sender) {
-       /* SlavesReady[sender - 1] = true;
+       SlavesReady[sender - 1] = true;
         if (std::all_of(SlavesReady, SlavesReady + 2, [](bool i) { return i; })) {
             std::cout << "Run Simulation" << std::endl;
             std::time_t now = std::time(0);
             manager->STC_run(1, currentState, now + 2);
-    //        manager->STC_run(2, currentState, now + 2);
+            manager->STC_run(2, currentState, now + 2);
             std::fill(SlavesReady, SlavesReady + 2, false);
-        }*/
-       std::cout << "Run Simulation" << std::endl;
-       std::time_t now = std::time(0);
-       manager->STC_run(1, currentState, now + 2);
+        }
+
+    }
+
+    void runNRT(uint8_t sender) {
+        if(nrtStepsTaken <= stepsToSimulate){
+            manager->STC_do_step(sender, DcpState::RUNNING, 1);
+        } else {
+            manager->STC_stop(2, DcpState::RUNNING);
+        }
+        nrtStepsTaken++;
     }
 
     void stop(uint8_t sender) {
-       /* SlavesReady[sender - 1] = true;
-        if (std::all_of(SlavesReady, SlavesReady + 2, [](bool i) { return i; })) {
             std::chrono::seconds dura(secondsToSimulate + 2);
             std::this_thread::sleep_for(dura);
             std::cout << "Stop Simulation" << std::endl;
 
             manager->STC_stop(1, DcpState::RUNNING);
-           // manager->STC_stop(2, DcpState::RUNNING);
-            std::fill(SlavesReady, SlavesReady + 2, false);
-        }*/
-       std::chrono::seconds dura(secondsToSimulate + 2);
-       std::this_thread::sleep_for(dura);
-       std::cout << "Stop Simulation" << std::endl;
 
-       manager->STC_stop(1, DcpState::RUNNING);
 
     }
 
@@ -236,8 +239,20 @@ private:
                 break;
 
             case DcpState::RUNNING:
-                stop(sender);
+                if(sender == 1){
+                    std::thread t(std::bind(&MasterModel::stop,this, sender));
+                    t.detach();
+                    break;
+                } else if(sender == 2){
+                    runNRT(sender);
+                    break;
+                }
                 break;
+
+            case DcpState::COMPUTED:
+                manager->STC_send_outputs(sender, DcpState::COMPUTED);
+                break;
+
             case DcpState::STOPPED:
                 deregister(sender);
                 break;
@@ -265,12 +280,14 @@ private:
     DcpManagerMaster *manager;
 
     uint64_t secondsToSimulate = 360;
+    int nrtStepsTaken = 0;
+    int stepsToSimulate = 50000;
     std::map<dcpId_t, uint8_t> numOfCmd;
     std::map<dcpId_t, uint64_t> receivedAcks;
 
-
+    std::thread::id main_thread_id;
     std::shared_ptr<SlaveDescription_t> slaveDescription1;
-  //  std::shared_ptr<SlaveDescription_t> slaveDescription2;
+    std::shared_ptr<SlaveDescription_t> slaveDescription2;
 
 
 };
